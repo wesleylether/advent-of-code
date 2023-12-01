@@ -1,12 +1,21 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::{fmt, fs};
+use std::time::{Duration, Instant};
+use std::{env, fmt, fs};
 
+use colored::Colorize;
+use dotenv::dotenv;
+use lazy_static::lazy_static;
+use regex::Regex;
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::Deserialize;
 
 use super::strings::StringExt;
 
-pub const PUZZLE_ROOT: &str = "puzzles";
+pub mod macros;
+pub mod prelude;
+
+pub const PUZZLE_ROOT: &str = "src/puzzle_inputs";
 
 type Day = u8;
 type Year = u16;
@@ -16,7 +25,7 @@ type PartIdentifier = String;
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum Solution {
-	Answer(u64),
+	Answer(usize),
 	StringAnswer(String),
 	Unsolved,
 }
@@ -84,16 +93,59 @@ pub struct Challenge {
 impl Challenge {
 	fn input(&self) -> PuzzleInput {
 		let mut path: PathBuf = self.puzzle_path();
-		path.push("input.txt");
+		path.push(format!("{:02}.txt", self.day));
 
-		fs::read_to_string(&path).expect(&format!("No puzzle input in {:?}", path))
+		match fs::read_to_string(&path) {
+			Ok(puzzle_input) => puzzle_input,
+			Err(_) => self.download_puzzle(),
+		}
+	}
+
+	fn download_puzzle(&self) -> PuzzleInput {
+		dotenv().ok();
+
+		let aoc_session = env::var("AOC_SESSION").expect("AOC_SESSION is not configured in the .env file");
+
+		let url = format!("https://adventofcode.com/{}/day/{}/input", self.year, self.day);
+		let client = reqwest::blocking::Client::new();
+		let mut headers = HeaderMap::new();
+		headers.insert(
+			"Cookie",
+			HeaderValue::from_str(&format!("session={}", aoc_session))
+				.expect("Couldn't create the correct Cookie header value"),
+		);
+		let response = client.get(&url).headers(headers).send();
+
+		match response {
+			Ok(response) => {
+				if response.status().is_success() {
+					let puzzle_input = response.text().expect("Failed to parse retrieved input data");
+					self.save_puzzle(&puzzle_input);
+					puzzle_input
+				} else {
+					panic!(
+						"Failed to download input data with http response code: {}",
+						response.status()
+					)
+				}
+			}
+			Err(error) => {
+				panic!("Couldn't load input file from url: {}, with error: {}", url, error)
+			}
+		}
 	}
 
 	fn puzzle_path(&self) -> PathBuf {
 		let mut path: PathBuf = PathBuf::from(PUZZLE_ROOT);
 		path.push(self.year.to_string());
-		path.push(format!("{:02}", self.day));
 		path
+	}
+
+	fn save_puzzle(&self, puzzle_input: &PuzzleInput) {
+		let mut path = self.puzzle_path();
+		fs::create_dir_all(&path).expect("Could not create directories");
+		path.push(format!("{:02}.txt", self.day));
+		fs::write(&path, puzzle_input).expect("Could not create file");
 	}
 
 	fn execute<'a>(&self, part: &SolutionPart, input: &'a PuzzleInput, args: &RawPuzzleArgs) -> (Solution, Duration) {
@@ -104,7 +156,6 @@ impl Challenge {
 	}
 
 	pub fn run(&self) {
-		let examples_by_part = self.examples();
 		let input = self.input();
 		let args = RawPuzzleArgs::new();
 
@@ -112,57 +163,22 @@ impl Challenge {
 			static ref WHITESPACE: Regex = Regex::new(r"\s+").unwrap();
 		}
 
-		'next_part: for part in self.parts {
+		for part in self.parts {
 			let fmt_header = format!("{} · Day {} · {}", self.year, self.day, part.title(),).cyan();
 			println!("{}", fmt_header);
 
-			if let Some(examples) = examples_by_part.get(&part.ident) {
-				for Example {
-					input,
-					answer: expected,
-					args,
-				} in examples
-				{
-					let excerpt: String = WHITESPACE.replace_all(input, " ").chars().take(25).collect();
-					let (result, duration) = self.execute(part, &input, &args);
-					self.output(&result, &duration, Some(expected), Some(&excerpt));
-					if result != *expected {
-						println!();
-						continue 'next_part;
-					}
-				}
-			}
-
 			let (result, duration) = self.execute(part, &input, &args);
-			self.output(&result, &duration, None, None);
+			self.output(&result, &duration);
 			println!();
 		}
 	}
 
-	fn output(&self, result: &Solution, duration: &Duration, expected: Option<&Solution>, excerpt: Option<&str>) {
-		let is_example = expected.is_some();
-
-		let fmt_label = if is_example {
-			format!("Example {}", excerpt.unwrap().yellow()).normal()
-		} else {
-			"Answer".normal()
-		};
+	fn output(&self, result: &Solution, duration: &Duration) {
+		let fmt_label = "Answer".normal();
 
 		let fmt_text = match result {
-			Solution::Answer(nr) => {
-				if is_example && result != expected.unwrap() {
-					format!("{} (expected: {})", nr, expected.unwrap()).red()
-				} else {
-					nr.to_string().green()
-				}
-			}
-			Solution::StringAnswer(str) => {
-				if is_example && result != expected.unwrap() {
-					format!("{} (expected: {})", str, expected.unwrap()).red()
-				} else {
-					str.green()
-				}
-			}
+			Solution::Answer(nr) => nr.to_string().green(),
+			Solution::StringAnswer(str) => str.green(),
 			Solution::Unsolved => "[not yet solved]".red(),
 		};
 
