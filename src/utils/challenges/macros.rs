@@ -6,6 +6,9 @@ macro_rules! preload_challenges {
 		    2015 (
 		        01
 		    )
+			2023 (
+				01
+			)
 		}
 	};
 
