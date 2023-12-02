@@ -1,10 +1,12 @@
+use std::str::Lines;
+
 use advent_of_code::utils::challenges::prelude::*;
 
-fn parse(input: &PuzzleInput) -> Vec<&str> {
-	input.trim().split("\n").collect()
+fn parse(input: &PuzzleInput) -> Lines {
+	input.trim().lines()
 }
 
-fn find_first_digit(s: &str, reverse: bool) -> Option<i32> {
+fn find_first_digit(s: &str, reverse: bool) -> Option<u64> {
 	let chars: Vec<char> = if reverse {
 		s.chars().rev().collect()
 	} else {
@@ -12,13 +14,13 @@ fn find_first_digit(s: &str, reverse: bool) -> Option<i32> {
 	};
 	for c in chars {
 		if c.is_numeric() {
-			return Some(c.to_digit(10).unwrap() as i32);
+			return Some(c.to_digit(10).unwrap() as u64);
 		}
 	}
 	None
 }
 
-fn get_numbers() -> Vec<(&'static str, i32)> {
+fn get_numbers() -> Vec<(&'static str, u64)> {
 	vec![
 		("one", 1),
 		("two", 2),
@@ -32,12 +34,12 @@ fn get_numbers() -> Vec<(&'static str, i32)> {
 	]
 }
 
-fn find_first_digit_or_written_number(s: &str, reverse: bool) -> Option<i32> {
+fn find_first_digit_or_written_number(s: &str, reverse: bool) -> Option<u64> {
 	if reverse {
 		let mut mut_line = s;
 		while !mut_line.is_empty() {
 			if mut_line.chars().rev().next()?.is_numeric() {
-				return Some(mut_line.chars().rev().next()?.to_digit(10).unwrap() as i32);
+				return Some(mut_line.chars().rev().next()?.to_digit(10).unwrap() as u64);
 			}
 			for (string_number, number) in get_numbers() {
 				if mut_line.ends_with(string_number) {
@@ -50,7 +52,7 @@ fn find_first_digit_or_written_number(s: &str, reverse: bool) -> Option<i32> {
 		let mut mut_line = s;
 		while !mut_line.is_empty() {
 			if mut_line.chars().next()?.is_numeric() {
-				return Some(mut_line.chars().next()?.to_digit(10).unwrap() as i32);
+				return Some(mut_line.chars().next()?.to_digit(10).unwrap() as u64);
 			}
 			for (string_number, number) in get_numbers() {
 				if mut_line.starts_with(string_number) {
@@ -65,29 +67,27 @@ fn find_first_digit_or_written_number(s: &str, reverse: bool) -> Option<i32> {
 }
 
 fn part_one(input: &PuzzleInput, _args: &RawPuzzleArgs) -> Solution {
-	let mut total = 0;
+	let lines = parse(input)
+		.map(|line| {
+			let first_digit = find_first_digit(line, false).unwrap();
+			let last_digit = find_first_digit(line, true).unwrap();
 
-	for line in parse(input) {
-		let first_digit = find_first_digit(line, false).unwrap();
-		let last_digit = find_first_digit(line, true).unwrap();
+			(first_digit * 10) + last_digit
+		})
+		.sum();
 
-		total = total + ((first_digit * 10) + last_digit);
-	}
-
-	Answer(total as usize)
+	Answer(lines)
 }
 
 fn part_two(input: &PuzzleInput, _args: &RawPuzzleArgs) -> Solution {
-	let mut total = 0;
-
-	for line in parse(input) {
-		let first_digit = find_first_digit_or_written_number(line, false).unwrap();
-		let last_digit = find_first_digit_or_written_number(line, true).unwrap();
-
-		total = total + ((first_digit * 10) + last_digit);
-	}
-
-	Answer(total as usize)
+	let lines = parse(input)
+		.map(|line| {
+			let first_digit = find_first_digit_or_written_number(line, false).unwrap();
+			let last_digit = find_first_digit_or_written_number(line, true).unwrap();
+			(first_digit * 10) + last_digit
+		})
+		.sum();
+	Answer(lines)
 }
 
 solve!(part_one, part_two);

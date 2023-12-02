@@ -14,12 +14,12 @@ fn part_one(input: &PuzzleInput, _args: &RawPuzzleArgs) -> Solution {
 		}
 	}
 
-	Answer(floor as usize)
+	Answer(floor as u64)
 }
 
 fn part_two(input: &PuzzleInput, _args: &RawPuzzleArgs) -> Solution {
 	let mut floor: i64 = 0;
-	let mut character = 0;
+	let mut character: i64 = 0;
 	for (i, &char) in parse(&input).iter().enumerate() {
 		if char == '(' {
 			floor += 1;
@@ -28,12 +28,12 @@ fn part_two(input: &PuzzleInput, _args: &RawPuzzleArgs) -> Solution {
 		}
 
 		if floor == -1 {
-			character = i;
+			character = i as i64;
 			break;
 		}
 	}
 
-	Answer(character)
+	Answer(character as u64)
 }
 
 solve!(part_one, part_two);

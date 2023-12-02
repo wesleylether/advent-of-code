@@ -25,7 +25,7 @@ type PartIdentifier = String;
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum Solution {
-	Answer(usize),
+	Answer(u64),
 	StringAnswer(String),
 	Unsolved,
 }
