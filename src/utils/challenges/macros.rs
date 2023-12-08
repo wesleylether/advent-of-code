@@ -9,7 +9,8 @@ macro_rules! preload_challenges {
 			2023 (
 				01,
 				02,
-				03
+				03,
+				04
 			)
 		}
 	};
