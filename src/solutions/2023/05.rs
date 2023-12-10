@@ -42,21 +42,34 @@ impl Almanac {
 		}
 	}
 
+	fn get_location_from_seed(&self, seed: &u64) -> (u64, u64) {
+		let soil = get_destination(&self.seed_to_soil, seed.into()).unwrap_or(*seed);
+		let fertilizer = get_destination(&self.soil_to_fertilizer, &soil).unwrap_or(soil);
+		let water = get_destination(&self.fertilizer_to_water, &fertilizer).unwrap_or(fertilizer);
+		let light = get_destination(&self.water_to_light, &water).unwrap_or(water);
+		let temperature = get_destination(&self.light_to_temperature, &light).unwrap_or(light);
+		let humidity = get_destination(&self.temperature_to_humidity, &temperature).unwrap_or(temperature);
+		let location = get_destination(&self.humidity_to_location, &humidity).unwrap_or(humidity);
+
+		(*seed, location)
+	}
+
 	fn seed_locations(&self) -> Vec<(u64, u64)> {
 		self.seeds
 			.iter()
-			.map(|seed| {
-				let soil = get_destination(&self.seed_to_soil, seed.into()).unwrap_or(*seed);
-				let fertilizer = get_destination(&self.soil_to_fertilizer, &soil).unwrap_or(soil);
-				let water = get_destination(&self.fertilizer_to_water, &fertilizer).unwrap_or(fertilizer);
-				let light = get_destination(&self.water_to_light, &water).unwrap_or(water);
-				let temperature = get_destination(&self.light_to_temperature, &light).unwrap_or(light);
-				let humidity = get_destination(&self.temperature_to_humidity, &temperature).unwrap_or(temperature);
-				let location = get_destination(&self.humidity_to_location, &humidity).unwrap_or(humidity);
-
-				(*seed, location)
-			})
+			.map(|seed| self.get_location_from_seed(seed))
 			.collect()
+	}
+
+	fn seed_range_locations(&self) -> Vec<(u64, u64)> {
+		let mut locations = Vec::new();
+		let seed_ranges: Vec<(u64, u64)> = self.seeds.chunks(2).map(|chunks| (chunks[0], chunks[1])).collect();
+		for (seed, range) in seed_ranges.iter() {
+			for s in *seed..*seed + *range {
+				locations.push(self.get_location_from_seed(&s));
+			}
+		}
+		locations
 	}
 }
 
@@ -115,8 +128,12 @@ fn part_one(input: &PuzzleInput, _args: &RawPuzzleArgs) -> Solution {
 	Answer(*min_location)
 }
 
-fn part_two(_input: &PuzzleInput, _args: &RawPuzzleArgs) -> Solution {
-	Unsolved
+fn part_two(input: &PuzzleInput, _args: &RawPuzzleArgs) -> Solution {
+	let almanac = parse(input);
+	let locations = almanac.seed_range_locations();
+	let min_location: &u64 = locations.iter().map(|(_, location)| location).min().unwrap();
+
+	Answer(*min_location)
 }
 
 solve!(part_one, part_two);
