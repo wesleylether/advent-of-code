@@ -11,7 +11,8 @@ macro_rules! preload_challenges {
 				02,
 				03,
 				04,
-				05
+				05,
+				06
 			)
 		}
 	};
