@@ -1,7 +1,9 @@
+use std::cell::RefCell;
 use std::fmt;
+use std::ops::{Deref, DerefMut};
 
 use advent_of_code::utils::challenges::prelude::*;
-use advent_of_code::utils::grids::Grid;
+use advent_of_code::utils::grids::{Grid, GridPoint};
 
 #[derive(Debug, Default)]
 enum SchematicElement {
@@ -41,7 +43,7 @@ impl From<&str> for EngineSchematic {
 					'*' => SchematicElement::Gear(vec![]),
 					_ => SchematicElement::Symbol,
 				};
-				engine_schematic.grid.set((y as isize, x as isize), point)
+				engine_schematic.grid.set((y as isize, x as isize), RefCell::new(point))
 			}
 		}
 		engine_schematic
@@ -51,6 +53,7 @@ impl From<&str> for EngineSchematic {
 #[derive(Debug)]
 struct Result {
 	is_part_number: bool,
+	gear_point: Option<GridPoint<isize, isize>>,
 	number: u32,
 	numbers: Vec<u32>,
 }
@@ -59,35 +62,9 @@ impl Result {
 	fn new() -> Self {
 		Self {
 			is_part_number: false,
+			gear_point: None,
 			number: 0,
 			numbers: vec![],
-		}
-	}
-
-	fn run_schematics(&mut self, engine_schematic: EngineSchematic) {
-		for ((y, x), element) in engine_schematic.grid.iter() {
-			if let SchematicElement::Number(n) = element {
-				self.grow_number(*n);
-
-				for (_, adjacent) in engine_schematic.grid.adjacent_iter((*y, *x)) {
-					if let SchematicElement::Symbol = adjacent {
-						self.is_part_number = true;
-					}
-					if let SchematicElement::Gear(_) = adjacent {
-						self.is_part_number = true;
-					}
-				}
-
-				match engine_schematic.grid.get((*y, *x + 1)) {
-					Some(element) => match element {
-						SchematicElement::Symbol | SchematicElement::Gear(_) | SchematicElement::Empty => {
-							self.add_part_if_part_number()
-						}
-						_ => (),
-					},
-					None => self.add_part_if_part_number(),
-				}
-			}
 		}
 	}
 
@@ -97,7 +74,7 @@ impl Result {
 
 	fn add_part_if_part_number(&mut self) {
 		if self.is_part_number {
-			self.numbers.push(self.number);
+			self.numbers.push(self.number.clone());
 		}
 
 		self.reset();
@@ -106,10 +83,50 @@ impl Result {
 	fn reset(&mut self) {
 		self.number = 0;
 		self.is_part_number = false;
+		self.gear_point = None;
 	}
 
 	fn total(&self) -> u64 {
 		self.numbers.iter().sum::<u32>() as u64
+	}
+}
+
+fn run_schematics(schematics: &mut EngineSchematic, result: &mut Result) {
+	for ((y, x), element) in schematics.grid.iter() {
+		if let SchematicElement::Number(n) = element.borrow().deref() {
+			result.grow_number(*n);
+
+			for (point, adjacent) in schematics.grid.adjacent_iter((*y, *x)) {
+				if let SchematicElement::Symbol = adjacent.borrow().deref() {
+					result.is_part_number = true;
+				}
+				if let SchematicElement::Gear(_) = adjacent.borrow().deref() {
+					result.is_part_number = true;
+					result.gear_point = Some(*point);
+				}
+			}
+
+			let mut add_number = false;
+
+			match schematics.grid.get((*y, *x + 1)) {
+				Some(element) => match element.borrow().deref() {
+					SchematicElement::Symbol | SchematicElement::Empty => add_number = true,
+					SchematicElement::Gear(_) => add_number = true,
+					_ => (),
+				},
+				None => add_number = true,
+			}
+
+			if add_number {
+				if let Some(point) = result.gear_point {
+					match schematics.grid.get(point).unwrap().borrow_mut().deref_mut() {
+						SchematicElement::Gear(numbers) => numbers.push(result.number.clone()),
+						_ => unreachable!(),
+					}
+				}
+				result.add_part_if_part_number();
+			}
+		}
 	}
 }
 
@@ -119,12 +136,30 @@ fn parse(input: &PuzzleInput) -> EngineSchematic {
 
 fn part_one(input: &PuzzleInput, _args: &RawPuzzleArgs) -> Solution {
 	let mut result = Result::new();
-	result.run_schematics(parse(input));
+	run_schematics(&mut parse(input), &mut result);
+
 	Answer(result.total())
 }
 
-fn part_two(_input: &PuzzleInput, _args: &RawPuzzleArgs) -> Solution {
-	Unsolved
+fn part_two(input: &PuzzleInput, _args: &RawPuzzleArgs) -> Solution {
+	let mut result = Result::new();
+	let mut schematics = parse(input);
+	run_schematics(&mut schematics, &mut result);
+
+	let total = schematics
+		.grid
+		.iter()
+		.filter(|(_, node)| match node.borrow().deref() {
+			SchematicElement::Gear(numbers) => return if numbers.iter().count() >= 2 { true } else { false },
+			_ => false,
+		})
+		.map(|(_, node)| match node.borrow().deref() {
+			SchematicElement::Gear(gears) => gears.iter().product::<u32>(),
+			_ => unreachable!(),
+		})
+		.sum::<u32>();
+
+	Answer(total as u64)
 }
 
 solve!(part_one, part_two);

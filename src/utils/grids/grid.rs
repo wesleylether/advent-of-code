@@ -1,3 +1,5 @@
+use std::array::IntoIter;
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::{Debug, Display};
@@ -5,12 +7,12 @@ use std::ops::{AddAssign, Range};
 
 use num::Integer;
 
-type GridPoint<Y, X> = (Y, X);
-type GridValue<V> = V;
+pub type GridPoint<Y, X> = (Y, X);
+pub type GridValue<V> = V;
 
 #[derive(Debug, Default)]
 pub struct Grid<X, Y, V> {
-	points: BTreeMap<GridPoint<Y, X>, GridValue<V>>,
+	points: BTreeMap<GridPoint<Y, X>, RefCell<GridValue<V>>>,
 }
 
 impl<X, Y, V> Grid<X, Y, V>
@@ -19,7 +21,7 @@ where
 	Y: AddAssign + Copy + Debug + Integer,
 	V: Display,
 {
-	pub fn column(&self, x: X) -> impl Iterator<Item = Option<&GridValue<V>>> + '_ {
+	pub fn column(&self, x: X) -> impl Iterator<Item = Option<&RefCell<GridValue<V>>>> + '_ {
 		let mut y = self.min_y();
 		let max_y = self.max_y();
 		std::iter::from_fn(move || {
@@ -29,7 +31,7 @@ where
 		})
 	}
 
-	pub fn columns(&self) -> impl Iterator<Item = impl Iterator<Item = Option<&GridValue<V>>> + '_> + '_ {
+	pub fn columns(&self) -> impl Iterator<Item = impl Iterator<Item = Option<&RefCell<GridValue<V>>>> + '_> + '_ {
 		let mut x = self.min_x();
 		let max_x = self.max_x();
 		std::iter::from_fn(move || {
@@ -39,7 +41,7 @@ where
 		})
 	}
 
-	pub fn row(&self, y: Y) -> impl Iterator<Item = Option<&GridValue<V>>> + '_ {
+	pub fn row(&self, y: Y) -> impl Iterator<Item = Option<&RefCell<GridValue<V>>>> + '_ {
 		let mut x = self.min_x();
 		let max_x = self.max_x();
 		std::iter::from_fn(move || {
@@ -49,7 +51,7 @@ where
 		})
 	}
 
-	pub fn rows(&self) -> impl Iterator<Item = impl Iterator<Item = Option<&GridValue<V>>> + '_> + '_ {
+	pub fn rows(&self) -> impl Iterator<Item = impl Iterator<Item = Option<&RefCell<GridValue<V>>>> + '_> + '_ {
 		let mut y = self.min_y();
 		let max_y = self.max_y();
 		std::iter::from_fn(move || {
@@ -83,31 +85,23 @@ where
 		self.ys().max().unwrap()
 	}
 
-	pub fn iter(&self) -> impl Iterator<Item = (&GridPoint<Y, X>, &GridValue<V>)> {
+	pub fn iter(&self) -> impl Iterator<Item = (&GridPoint<Y, X>, &RefCell<GridValue<V>>)> {
 		self.points.iter()
 	}
 
-	pub fn iter_mut(&mut self) -> impl Iterator<Item = (&GridPoint<Y, X>, &mut GridValue<V>)> {
-		self.points.iter_mut()
-	}
-
-	pub fn get_point(&self, point: GridPoint<Y, X>) -> Option<(&GridPoint<Y, X>, &GridValue<V>)> {
+	pub fn get_point(&self, point: GridPoint<Y, X>) -> Option<(&GridPoint<Y, X>, &RefCell<GridValue<V>>)> {
 		self.points.get_key_value(&point)
 	}
 
-	pub fn get(&self, point: GridPoint<Y, X>) -> Option<&GridValue<V>> {
+	pub fn get(&self, point: GridPoint<Y, X>) -> Option<&RefCell<GridValue<V>>> {
 		self.points.get(&point)
 	}
 
-	pub fn get_mut(&mut self, point: GridPoint<Y, X>) -> Option<&mut GridValue<V>> {
-		self.points.get_mut(&point)
-	}
-
-	pub fn set(&mut self, point: GridPoint<Y, X>, value: GridValue<V>) {
+	pub fn set(&mut self, point: GridPoint<Y, X>, value: RefCell<GridValue<V>>) {
 		self.points.insert(point, value);
 	}
 
-	pub fn adjacent_iter(&self, (y, x): GridPoint<Y, X>) -> impl Iterator<Item = (&GridPoint<Y, X>, &GridValue<V>)> {
+	pub fn adjacent_iter_indices(&self, (y, x): GridPoint<Y, X>) -> impl Iterator<Item = GridPoint<Y, X>> + '_ {
 		let x1 = X::one();
 		let y1 = Y::one();
 		let adjacent = [
@@ -120,17 +114,21 @@ where
 			(y + y1, x),
 			(y + y1, x + x1),
 		];
-		let mut index = 0;
-		std::iter::from_fn(move || {
-			while index < adjacent.len() {
-				let result = self.get_point(adjacent[index]);
-				index += 1;
-				if result.is_some() {
-					return result;
-				}
+		IntoIter::filter_map(adjacent.into_iter(), move |point| {
+			if self.points.contains_key(&point) {
+				Some(point)
+			} else {
+				None
 			}
-			None
 		})
+	}
+
+	pub fn adjacent_iter(
+		&self,
+		point: GridPoint<Y, X>,
+	) -> impl Iterator<Item = (&GridPoint<Y, X>, &RefCell<GridValue<V>>)> + '_ {
+		self.adjacent_iter_indices(point)
+			.filter_map(move |adj_point| self.get_point(adj_point))
 	}
 }
 
@@ -146,7 +144,7 @@ where
 		for y in self.min_y()..self.max_y() + Y::one() {
 			for x in self.min_x()..self.max_x() + X::one() {
 				if let Some(value) = self.points.get(&(y, x)) {
-					write!(f, "{}", value)?;
+					write!(f, "{}", value.borrow())?;
 				} else {
 					write!(f, ".")?;
 				}
